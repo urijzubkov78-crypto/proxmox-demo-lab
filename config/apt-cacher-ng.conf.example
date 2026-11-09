@@ -1,0 +1,5 @@
+# Локальный фрагмент /etc/apt-cacher-ng/zz-demo-lab.conf
+CacheDir: /mnt/pve/VM_Disk/apt-cache
+Port: 3142
+BindAddress: 10.0.55.12 127.0.0.1
+# Гостям настраивается HTTP forward proxy.

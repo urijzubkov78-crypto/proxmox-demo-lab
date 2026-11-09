@@ -1,0 +1,9 @@
+# Профиль нашего полигона. Финализатор проверяет эти значения.
+WAN_BR="vmbr0"
+IMG_DIR="/mnt/pve/VM_Disk/spetsnaz-images"
+TARGET_STORAGE="ssd"
+IMG_FROM_DEMO_2="DEMO_1"
+HQSRV_EXTRA_DISKS="2:1"
+PROXY_IP="10.0.55.12"
+APT_MODE="proxy"
+APT_CACHE_PORT="3142"

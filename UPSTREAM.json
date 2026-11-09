@@ -1,0 +1,19 @@
+{
+  "upstream": "https://github.com/elena777-int/proxmox-auto-deploy",
+  "commit": "c4dd79dcc7c72a533a175c84345bbed201247592",
+  "profile": "demo2-lab-1.0.0",
+  "files": {
+    "core.sh": {
+      "upstream_sha256": "d075e6a121a76dbc1501883e4ecfdd0ef4ee7cf9e423b3267932a0095b42916d",
+      "profile_sha256": "4143b837190b90171b0dcf65c71e540166f466a54239ed3ba2de3dfdc5db6614"
+    },
+    "menu.sh": {
+      "upstream_sha256": "ff9d5ee54662cb995bc445e2112ced1d5c589a52db7b77aa9b733ba48bdb4054",
+      "profile_sha256": "ff9d5ee54662cb995bc445e2112ced1d5c589a52db7b77aa9b733ba48bdb4054"
+    },
+    "LICENSE": {
+      "upstream_sha256": "9ae5791874ae44d6f3ff1001e953e33e083d873cdb23caf14b84e46e18524606",
+      "profile_sha256": "9ae5791874ae44d6f3ff1001e953e33e083d873cdb23caf14b84e46e18524606"
+    }
+  }
+}

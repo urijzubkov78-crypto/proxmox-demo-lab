@@ -1,0 +1,88 @@
+--- a/core.sh
++++ b/core.sh
+@@ -205,7 +205,7 @@
+ # Диск с дополнительными материалами для модуля: «имя_ISO|роли через пробел»; пусто — модулю не нужен
+ iso_spec() {
+     case "$MOD_TYPE" in
+-        DEMO_2|DEMO_3|DEMO_T2|DEMO_T3|DEMO_GOLD) echo "Additional_de.iso|HQ-SRV BR-SRV" ;;
++        DEMO_2|DEMO_3|DEMO_T2|DEMO_T3|DEMO_GOLD) echo "Additional.iso|HQ-SRV BR-SRV" ;;
+         REG_*|MOD_*|GOLD_*)                     echo "Additional_rc.iso|COD-ADMIN" ;;
+     esac
+ }
+@@ -323,10 +323,12 @@
+ }
+ 
+ get_next_free_hundred() {
+-    local base=10000 used_ids
++    local base=20000 used_ids
+     # ID занятых ВМ берём по всему кластеру (qm list показывает только текущий узел)
+-    used_ids=$(pvesh get /cluster/resources --type vm --output-format json 2>/dev/null | grep -Po '"vmid":\K\d+')
+-    [ -z "$used_ids" ] && used_ids=$(qm list | awk 'NR>1 {print $1}')
++    if ! used_ids=$(set -o pipefail; pvesh get /cluster/resources --type vm --output-format json | jq -er 'if type == "array" then [.[] | .vmid | tostring] | join("\n") else error("invalid VM inventory") end'); then
++        echo "Не удалось прочитать VMID всего кластера; деплой остановлен" >&2
++        return 1
++    fi
+     while true; do
+         local conflict=0
+         for vmid in $used_ids; do
+@@ -477,7 +479,7 @@
+         [ "$need" -eq 0 ] && break
+         [ "$bus" = "ide" ] && [ "$i" -gt 3 ] && break
+         echo "$cfg" | grep -q "^${bus}${i}: " && continue
+-        if out=$(qm set "$vid" --${bus}${i} "${TARGET_STORAGE}:${size}" 2>&1); then
++        if out=$(qm set "$vid" --${bus}${i} "${TARGET_STORAGE}:${size},format=qcow2" 2>&1); then
+             cfg+=$'\n'"${bus}${i}: added"; need=$((need - 1)); added=$((added + 1))
+         else
+             echo -e "      ${C_YELLOW}⚠ HQ-SRV: диск ${bus}${i} не добавлен: $(echo "$out" | tail -n 1)${C_NC}"; break
+@@ -503,7 +505,7 @@
+     fi
+ 
+     local rt0=$SECONDS
+-    if ! out=$(zstdcat "$full_archive_path" | qmrestore - "$vid" --storage "$TARGET_STORAGE" --force 1 2>&1); then
++    if ! out=$(set -o pipefail; zstdcat "$full_archive_path" | qmrestore - "$vid" --storage "$TARGET_STORAGE" 2>&1); then
+         echo -e "    ${C_RED}✖ $vm_label (ID: $vid): восстановление не удалось: $(echo "$out" | grep -v '^progress' | tail -n 2 | tr '\n' ' ')${C_NC}"
+         return 2
+     fi
+@@ -531,10 +533,9 @@
+     qm set $vid --tablet 1 --vga qxl >/dev/null 2>&1
+     [ "${RES_APPLY:-0}" = "1" ] && apply_resources "$vid" "$name"
+ 
+-    sleep 1; qm unlock $vid >/dev/null 2>&1
+-    if ! snap_exists "$vid" "Day0"; then
+-        snap_err=$(qm snapshot $vid "Day0" --description "Чистый старт стенда" 2>&1) || echo -e "    ${C_YELLOW}⚠ VM $vid: снапшот Day0 не создан: $(echo "$snap_err" | tail -n 1)${C_NC}"
+-    fi
++    # Day0 создаётся только после APT/ISO и проверок в finalize_demo2.py.
++    # Блокировки активных задач автоматически не снимаем.
++    echo "    VM $vid: Day0 отложен до финальной подготовки"
+     return 0
+ }
+ 
+@@ -920,12 +921,12 @@
+     case "$mode" in
+         cache)
+             if [ "$APT_MODE" = "proxy" ]; then
+-                cmd="echo 'Acquire::http::Proxy \"http://${PROXY_IP}:${APT_CACHE_PORT}\";' > /etc/apt/apt.conf.d/99spetsnaz-proxy"
++                cmd="echo 'Acquire::http::Proxy \"http://${PROXY_IP}:${APT_CACHE_PORT}\";' > /etc/apt/apt.conf.d/99spetsnaz-proxy.conf"
+             else
+-                cmd="rm -f /etc/apt/apt.conf.d/99spetsnaz-proxy /etc/apt/sources.list.d/alt.list /etc/apt/sources.list.d/spetsnaz.list; sed -i -e '/x86_64-i586/s/^rpm/#rpm/' -e '/^[[:space:]]*#/!s|http://${APT_MIRROR_HOST}|http://${PROXY_IP}:${APT_CACHE_PORT}|g' /etc/apt/sources.list.d/yandex.list"
++                cmd="rm -f /etc/apt/apt.conf.d/99spetsnaz-proxy.conf /etc/apt/sources.list.d/alt.list /etc/apt/sources.list.d/spetsnaz.list; sed -i -e '/x86_64-i586/s/^rpm/#rpm/' -e '/^[[:space:]]*#/!s|http://${APT_MIRROR_HOST}|http://${PROXY_IP}:${APT_CACHE_PORT}|g' /etc/apt/sources.list.d/yandex.list"
+             fi ;;
+         direct)
+-            cmd="rm -f /etc/apt/apt.conf.d/99spetsnaz-proxy; sed -i '/^[[:space:]]*#/!s|http://[0-9.]*:${APT_CACHE_PORT}/|http://${APT_MIRROR_HOST}/|g' /etc/apt/sources.list.d/yandex.list" ;;
++            cmd="rm -f /etc/apt/apt.conf.d/99spetsnaz-proxy.conf; sed -i '/^[[:space:]]*#/!s|http://[0-9.]*:${APT_CACHE_PORT}/|http://${APT_MIRROR_HOST}/|g' /etc/apt/sources.list.d/yandex.list" ;;
+     esac
+     # Чистим кэш пакетов и СПИСКИ пакетов (только файлы, каталог lists/partial должен остаться): иначе после смены источника остаются индексы с прежнего источника
+     # и apt-get update даёт «Size mismatch / Hash Sum mismatch»
+@@ -1468,7 +1469,11 @@
+         echo
+ 
+         for s in "${EXPANDED_STANDS[@]}"; do
+-            STAND_BASE=$(get_next_free_hundred)
++            STAND_BASE=$(get_next_free_hundred) || exit 1
++            if [[ "$MOD_TYPE" == "DEMO_2" ]] && [ "$STAND_BASE" -ne "$((20000 + (s - 1) * 100))" ]; then
++                echo "DEMO_2: свободный блок $STAND_BASE не соответствует стенду $s. Деплой остановлен; проверьте занятые VMID и порядок стендов." >&2
++                exit 1
++            fi
+             deploy_from_images "$s" "$STAND_BASE" "$MOD_TYPE"
+             read -r SU_USED SU_DECL SU_CNT < <(pool_usage "${MOD_TYPE}_S${s}")
+             echo -e "    Стенд $s занимает на дисках: $(gb "$SU_USED") ГБ (объявленный объём дисков $(gb "$SU_DECL") ГБ, ВМ: $SU_CNT)"

@@ -1,0 +1,22 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+      - name: Bash syntax
+        run: bash -n core.sh && bash -n menu.sh
+      - name: Profile, host and guest simulations
+        run: |
+          python tests/test_profile.py
+          python tests/test_prepare_disks.py
+          python tests/test_finalize_demo2.py
+          python tests/test_finalize_demo2_guest.py
+      - name: Python syntax
+        run: python -m compileall -q finalize_demo2.py repair_alt_apt.py scripts
